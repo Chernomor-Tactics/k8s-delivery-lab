@@ -67,7 +67,7 @@ jobs:
       - name: Stop containers
         if: always()
         run: docker compose down
-    publish:
+  publish:
     name: Publish image
     needs: test
     if: github.event_name == 'push'
