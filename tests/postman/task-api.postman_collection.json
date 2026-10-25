@@ -1,0 +1,163 @@
+{
+  "info": {
+    "name": "Task API checks",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "http://127.0.0.1:8001"}
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/health"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Healthy', () => {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().status).to.eql('ok');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Version",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/version"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Version is present', () => {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().version).to.be.a('string').and.not.empty;",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Create task",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/tasks",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"title\":\"Learn Docker\"}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.collectionVariables.unset('task_id');",
+            "pm.test('Task created', () => {",
+            "  pm.response.to.have.status(201);",
+            "  const task = pm.response.json();",
+            "  pm.expect(task.id).to.be.a('string').and.not.empty;",
+            "  pm.expect(task.title).to.eql('Learn Docker');",
+            "  pm.expect(task.completed).to.eql(false);",
+            "  pm.collectionVariables.set('task_id', task.id);",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Get created task",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/tasks/{{task_id}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Created task is available', () => {",
+            "  pm.response.to.have.status(200);",
+            "  pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('task_id'));",
+            "  pm.expect(pm.response.json().title).to.eql('Learn Docker');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Reject empty title",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/tasks",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"title\":\"\"}"
+        }
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Empty title rejected', () => {",
+            "  pm.response.to.have.status(422);",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Delete created task",
+      "request": {
+        "method": "DELETE",
+        "url": "{{base_url}}/tasks/{{task_id}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Task deleted without response body', () => {",
+            "  pm.response.to.have.status(204);",
+            "  pm.expect(pm.response.text()).to.eql('');",
+            "});"
+          ]
+        }
+      }]
+    },
+    {
+      "name": "Deleted task is missing",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/tasks/{{task_id}}"
+      },
+      "event": [{
+        "listen": "test",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            "pm.test('Deleted task returns 404', () => {",
+            "  pm.response.to.have.status(404);",
+            "  pm.expect(pm.response.json().detail).to.eql('Task not found');",
+            "});"
+          ]
+        }
+      }]
+    }
+  ]
+}
