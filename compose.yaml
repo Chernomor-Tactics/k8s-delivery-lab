@@ -1,0 +1,9 @@
+services:
+  api:
+    build:
+      context: .
+    image: task-api:0.1.0
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      APP_VERSION: "0.1.0"
