@@ -29,6 +29,13 @@ jobs:
       - name: Run API tests
         run: python -m pytest tests/unit -v
 
+      - name: Validate Ansible and shell scripts
+        run: |
+          python -m pip install 'ansible-core>=2.20,<2.22'
+          ansible-galaxy collection install -r ansible/requirements.yml
+          ansible-playbook -i ansible/inventory.example.ini ansible/playbook.yml --syntax-check
+          bash -n scripts/deploy.sh scripts/smoke-test.sh docs/deploy-release.example.sh
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:

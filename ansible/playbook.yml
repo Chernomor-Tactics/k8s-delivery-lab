@@ -1,0 +1,128 @@
+---
+- name: Prepare server and deploy Task API
+  hosts: app_servers
+  become: true
+
+  vars:
+    deployment_mode: registry
+    release_sha: "9b02880642b28a56239e3d86e28b7aba49a46806"
+    registry_username: Chernomor-Tactics
+    registry_repository: ghcr.io/chernomor-tactics/k8s-delivery-lab
+    app_version: "{{ 'local' if deployment_mode == 'source' else release_sha }}"
+    app_image: "{{ 'task-api:ansible-local' if deployment_mode == 'source' else registry_repository ~ ':sha-' ~ release_sha }}"
+    app_port: 8080
+    app_directory: /opt/task-api
+    app_project_name: task-api
+
+  tasks:
+    - name: Validate deployment mode
+      ansible.builtin.assert:
+        that:
+          - deployment_mode in ['source', 'registry']
+
+    - name: Check registry credentials are provided
+      ansible.builtin.assert:
+        that:
+          - lookup('ansible.builtin.env', 'GHCR_TOKEN') | length > 0
+        fail_msg: "Set GHCR_TOKEN on the Mac before running registry mode"
+      no_log: true
+      when: deployment_mode == 'registry'
+
+    - name: Install Docker and dependencies
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - python3-requests
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+        lock_timeout: 120
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd_service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Create application directory
+      ansible.builtin.file:
+        path: "{{ app_directory }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create source directory
+      ansible.builtin.file:
+        path: "{{ app_directory }}/app"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: deployment_mode == 'source'
+
+    - name: Copy application sources for local build
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../{{ item }}"
+        dest: "{{ app_directory }}/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - Dockerfile
+        - requirements.txt
+        - app/main.py
+        - app/__init__.py
+      register: source_files
+      when: deployment_mode == 'source'
+
+    - name: Authenticate with GHCR
+      community.docker.docker_login:
+        registry_url: ghcr.io
+        username: "{{ registry_username }}"
+        password: "{{ lookup('ansible.builtin.env', 'GHCR_TOKEN') }}"
+      no_log: true
+      when: deployment_mode == 'registry'
+
+    - name: Generate Compose configuration
+      ansible.builtin.template:
+        src: compose.yaml.j2
+        dest: "{{ app_directory }}/compose.yaml"
+        owner: root
+        group: root
+        mode: "0644"
+      register: compose_config
+
+    - name: Deploy application
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_directory }}"
+        project_name: "{{ app_project_name }}"
+        state: present
+        pull: "{{ 'never' if deployment_mode == 'source' else 'missing' }}"
+        build: "{{ 'always' if deployment_mode == 'source' and ((source_files.changed | default(false)) or compose_config.changed) else 'never' }}"
+        wait: true
+        wait_timeout: 120
+
+    - name: Check application health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/health"
+        status_code: 200
+        return_content: true
+      register: health
+      until: health.status == 200 and (health.json | default({})).get('status', '') == 'ok'
+      retries: 10
+      delay: 2
+
+    - name: Read application version
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/version"
+        status_code: 200
+        return_content: true
+      register: version_response
+
+    - name: Verify deployed version
+      ansible.builtin.assert:
+        that:
+          - version_response.json.version == app_version
+        success_msg: "The selected application version is running"

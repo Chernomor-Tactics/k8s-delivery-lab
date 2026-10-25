@@ -4,6 +4,16 @@ services:
       context: .
     image: task-api:0.1.0
     ports:
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:${APP_PORT:-8001}:8000"
     environment:
-      APP_VERSION: "0.1.0"
+      APP_VERSION: "${APP_VERSION:-0.1.0}"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s

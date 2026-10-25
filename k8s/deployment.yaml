@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-api
+  namespace: task-lab
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: task-api
+  template:
+    metadata:
+      labels:
+        app: task-api
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: api
+          image: ghcr.io/chernomor-tactics/k8s-delivery-lab:sha-9b02880642b28a56239e3d86e28b7aba49a46806
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: task-api-config
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10

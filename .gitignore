@@ -1,6 +1,13 @@
 .venv/
+.venv-ansible/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .env
+.env.*
+!.env.example
 .DS_Store
+ansible/inventory.ini
+ansible/inventory.local.*
+.local/
+test-results/

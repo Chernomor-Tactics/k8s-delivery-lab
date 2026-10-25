@@ -1,8 +1,10 @@
 .venv/
+.venv-ansible/
 .git/
-__pycache__/
 **/__pycache__/
 .pytest_cache/
 .env
 .env.*
 .DS_Store
+ansible/inventory.ini
+.local/

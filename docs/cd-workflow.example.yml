@@ -1,0 +1,89 @@
+name: CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "Full commit SHA with successful CI"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: minikube-task-lab
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, macOS, k8s-local]
+    timeout-minutes: 10
+
+    env:
+      RELEASE_SHA: ${{ inputs.release_sha }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Configure tool paths
+        run: |
+          echo "/opt/homebrew/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/bin" >> "$GITHUB_PATH"
+
+      - name: Validate release and successful CI
+        shell: bash
+        run: |
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "Expected a full lowercase commit SHA"
+            exit 1
+          }
+
+          count=$(gh run list \
+            --repo Chernomor-Tactics/k8s-delivery-lab \
+            --workflow ci.yml \
+            --branch develop \
+            --commit "$RELEASE_SHA" \
+            --event push \
+            --status success \
+            --json databaseId \
+            --jq 'length')
+
+          if [[ "$count" -eq 0 ]]; then
+            echo "No successful CI found for this commit"
+            exit 1
+          fi
+
+      - name: Download deployment scripts
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download release tests
+        uses: actions/checkout@v7
+        with:
+          repository: Chernomor-Tactics/k8s-delivery-lab
+          ref: ${{ inputs.release_sha }}
+          path: source
+          persist-credentials: false
+
+      - name: Check Kubernetes access
+        run: |
+          kubectl --context=minikube get --raw='/readyz' \
+            --request-timeout=10s
+          kubectl --context=minikube -n task-lab get deployment task-api
+          kubectl --context=minikube -n task-lab get secret ghcr-pull
+
+      - name: Deploy and test
+        run: |
+          bash scripts/deploy.sh "$RELEASE_SHA" \
+            source/tests/postman/task-api.postman_collection.json
+
+      - name: Show application diagnostics
+        if: failure()
+        run: |
+          kubectl --context=minikube -n task-lab get pods \
+            --request-timeout=10s
+          kubectl --context=minikube -n task-lab logs \
+            deployment/task-api --tail=50 --request-timeout=10s

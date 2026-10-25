@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: task-api-config
+  namespace: task-lab
+data:
+  APP_VERSION: 9b02880642b28a56239e3d86e28b7aba49a46806
